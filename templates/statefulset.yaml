@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "mongodb-ha.fullname" . }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "mongodb-ha.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "mongodb-ha.fullname" . }}-service
+  replicas: {{ .Values.mongodb.replicaSet.replicas }}
+  selector:
+    matchLabels:
+      {{- include "mongodb-ha.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "mongodb-ha.selectorLabels" . | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+        runAsUser: {{ .Values.securityContext.runAsUser }}
+      initContainers:
+        # Setup keyfile with correct permissions
+        - name: setup-keyfile
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              cp /tmp/keyfile/replica-set-key /data/keyfile/replica-set-key
+              chmod 400 /data/keyfile/replica-set-key
+              chown 999:999 /data/keyfile/replica-set-key
+          volumeMounts:
+            - name: keyfile-secret
+              mountPath: /tmp/keyfile
+            - name: keyfile
+              mountPath: /data/keyfile
+          securityContext:
+            runAsUser: 0
+        
+        # Initialize data directory
+        - name: init-data-dir
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              chown -R 999:999 /data/db
+              chmod -R 755 /data/db
+              mkdir -p /var/log/mongodb
+              chown -R 999:999 /var/log/mongodb
+              chmod -R 755 /var/log/mongodb
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+            - name: mongodb-logs
+              mountPath: /var/log/mongodb
+          securityContext:
+            runAsUser: 0
+      
+      containers:
+        - name: mongodb
+          image: "{{ .Values.mongodb.image.repository }}:{{ .Values.mongodb.image.tag }}"
+          imagePullPolicy: {{ .Values.mongodb.image.pullPolicy }}
+          command:
+            - mongod
+            - --config
+            - /etc/mongod.conf
+          ports:
+            - containerPort: {{ .Values.mongodb.service.port }}
+              name: mongodb
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: {{ .Values.mongodb.storage.dbPath }}
+            - name: mongodb-config-volume
+              mountPath: /etc/mongod.conf
+              subPath: mongod.conf
+            - name: keyfile
+              mountPath: /etc/mongodb-keyfile
+            - name: mongodb-logs
+              mountPath: /var/log/mongodb
+          resources:
+            {{- toYaml .Values.mongodb.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - -u
+                - {{ .Values.mongodb.auth.rootUsername }}
+                - -p
+                - {{ .Values.mongodb.auth.rootPassword }}
+                - --authenticationDatabase
+                - admin
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - mongosh
+                - --quiet
+                - -u
+                - {{ .Values.mongodb.auth.rootUsername }}
+                - -p
+                - {{ .Values.mongodb.auth.rootPassword }}
+                - --authenticationDatabase
+                - admin
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      
+      volumes:
+        - name: mongodb-config-volume
+          configMap:
+            name: {{ include "mongodb-ha.fullname" . }}-config
+        - name: keyfile-secret
+          secret:
+            secretName: {{ include "mongodb-ha.fullname" . }}-secret
+            items:
+              - key: REPLICA_SET_KEY
+                path: replica-set-key
+        - name: keyfile
+          emptyDir: {}
+        - name: mongodb-logs
+          emptyDir: {}
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: {{ .Values.mongodb.storage.storageClassName }}
+        resources:
+          requests:
+            storage: {{ .Values.mongodb.storage.size }}

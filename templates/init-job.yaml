@@ -1,0 +1,90 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "mongodb-ha.fullname" . }}-init-replicaset
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "mongodb-ha.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 10
+  template:
+    metadata:
+      labels:
+        {{- include "mongodb-ha.selectorLabels" . | nindent 8 }}
+        job-name: init-replicaset
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mongo-init
+          image: "{{ .Values.mongodb.image.repository }}:{{ .Values.mongodb.image.tag }}"
+          command:
+            - bash
+            - -c
+            - |
+              set -e
+              
+              echo "Waiting for MongoDB pods to be ready..."
+              sleep 60
+              
+              echo "=========================================="
+              echo "Step 1: Initializing replica set..."
+              echo "=========================================="
+              
+              mongosh --host {{ include "mongodb-ha.fullname" . }}-0.{{ include "mongodb-ha.fullname" . }}-service.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.mongodb.service.port }} <<'EOF'
+              rs.initiate({
+                _id: "{{ .Values.mongodb.replicaSet.name }}",
+                members: [
+                  { _id: 0, host: "{{ include "mongodb-ha.fullname" . }}-0.{{ include "mongodb-ha.fullname" . }}-service.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.mongodb.service.port }}", priority: 2 },
+                  { _id: 1, host: "{{ include "mongodb-ha.fullname" . }}-1.{{ include "mongodb-ha.fullname" . }}-service.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.mongodb.service.port }}", priority: 1 },
+                  { _id: 2, host: "{{ include "mongodb-ha.fullname" . }}-2.{{ include "mongodb-ha.fullname" . }}-service.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.mongodb.service.port }}", priority: 1 }
+                ]
+              })
+              EOF
+              
+              echo ""
+              echo "Waiting 30 seconds for replica set to stabilize..."
+              sleep 30
+              
+              echo ""
+              echo "=========================================="
+              echo "Step 2: Creating admin user..."
+              echo "=========================================="
+              
+              mongosh --host {{ include "mongodb-ha.fullname" . }}-0.{{ include "mongodb-ha.fullname" . }}-service.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.mongodb.service.port }} <<'EOF'
+              admin = db.getSiblingDB("admin");
+              admin.createUser({
+                user: "{{ .Values.mongodb.auth.rootUsername }}",
+                pwd: "{{ .Values.mongodb.auth.rootPassword }}",
+                roles: [ { role: "root", db: "admin" } ]
+              })
+              EOF
+              
+              echo ""
+              echo "Waiting 10 seconds..."
+              sleep 10
+              
+              echo ""
+              echo "=========================================="
+              echo "Step 3: Verifying setup..."
+              echo "=========================================="
+              
+              mongosh --host {{ include "mongodb-ha.fullname" . }}-0.{{ include "mongodb-ha.fullname" . }}-service.{{ .Values.namespace.name }}.svc.cluster.local:{{ .Values.mongodb.service.port }} \
+                -u {{ .Values.mongodb.auth.rootUsername }} \
+                -p '{{ .Values.mongodb.auth.rootPassword }}' \
+                --authenticationDatabase admin <<'EOF'
+              print("\n=== Replica Set Status ===");
+              rs.status().members.forEach(function(member) {
+                print("Member: " + member.name + " - State: " + member.stateStr + " - Health: " + member.health);
+              });
+              print("\n=== Database Users ===");
+              db.getSiblingDB("admin").getUsers();
+              EOF
+              
+              echo ""
+              echo "=========================================="
+              echo "✓ Initialization Complete!"
+              echo "=========================================="

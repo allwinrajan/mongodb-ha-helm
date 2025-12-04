@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mongodb-ha.fullname" . }}-nodeport
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- include "mongodb-ha.labels" . | nindent 4 }}
+spec:
+  type: NodePort
+  selector:
+    {{- include "mongodb-ha.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: mongodb
+      port: {{ .Values.mongodb.service.port }}
+      targetPort: mongodb
+      nodePort: {{ .Values.mongodb.service.nodePort }}

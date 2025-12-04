@@ -1,0 +1,18 @@
+apiVersion: v2
+name: mongodb-ha
+description: MongoDB High Availability Replica Set for Kubernetes
+type: application
+version: 1.0.0
+appVersion: "7.0"
+keywords:
+  - mongodb
+  - database
+  - replicaset
+  - high-availability
+maintainers:
+  - name: allwinrajan
+    email: allwinrajan06gmail.com
+home: https://github.com/allwinrajan/mongodb-ha-helm
+sources:
+  - https://github.com/allwinrajan/mongodb-ha-helm
+icon: https://www.mongodb.com/assets/images/global/favicon.ico

@@ -1,0 +1,53 @@
+# MongoDB Configuration
+mongodb:
+  image:
+    repository: mongo
+    tag: "7.0"
+    pullPolicy: IfNotPresent
+  
+  replicaSet:
+    name: rs0
+    replicas: 3
+  
+  # Admin credentials
+  auth:
+    rootUsername: admin
+    rootPassword: "Pr0d@Mong0DB!2024"
+    # Base64 encoded replica set key
+    replicaSetKey: |
+      TGhzIGlzIGEgdmVyeSBzZWN1cmUga2V5IGZvciBNb25nb0RCIHJlcGxpY2Egc2V0IGF1dGhlbnRp
+      Y2F0aW9uLiBQbGVhc2UgY2hhbmdlIHRoaXMgdG8gYSByYW5kb20gYmFzZTY0IGVuY29kZWQgc3Ry
+      aW5nIGZvciBwcm9kdWN0aW9uIHVzZS4gVGhpcyBrZXkgbXVzdCBiZSBiZXR3ZWVuIDYgYW5kIDEw
+      MjQgY2hhcmFjdGVycyBsb25nLg==
+
+  # Storage configuration
+  storage:
+    dbPath: /data/db
+    size: 40Gi
+    storageClassName: local-storage
+    cacheSizeGB: 3
+    oplogSizeMB: 8192
+
+  # Resource limits
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "500m"
+    limits:
+      memory: "4Gi"
+      cpu: "1000m"
+
+  # Port configuration
+  service:
+    port: 27017
+    nodePort: 30017
+
+# Namespace
+namespace:
+  name: mongodb-ha
+  create: true
+
+# Security context
+securityContext:
+  fsGroup: 999
+  runAsUser: 999
