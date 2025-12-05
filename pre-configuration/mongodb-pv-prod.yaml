@@ -1,0 +1,125 @@
+# MongoDB Production - PersistentVolumes with Local Storage
+# 
+# INSTRUCTIONS:
+# 1. Replace 'YOUR-NODE-NAME-HERE' with actual node names (run: kubectl get nodes)
+# 2. Ensure directories exist on each node: /mnt/mongodb-storage/mongodb-data-{0,1,2}
+# 3. Apply with: kubectl apply -f mongodb-pv-prod.yaml
+# 4. Verify with: kubectl get pv
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv-0
+  labels:
+    type: local
+    app: mongodb
+    replica: "0"
+spec:
+  capacity:
+    storage: 40Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /mnt/mongodb-storage/mongodb-data-0
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - YOUR-NODE-NAME-HERE  # 👈 CHANGE THIS! (run: kubectl get nodes)
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv-1
+  labels:
+    type: local
+    app: mongodb
+    replica: "1"
+spec:
+  capacity:
+    storage: 40Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /mnt/mongodb-storage/mongodb-data-1
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - YOUR-NODE-NAME-HERE  # 👈 CHANGE THIS! (run: kubectl get nodes)
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv-2
+  labels:
+    type: local
+    app: mongodb
+    replica: "2"
+spec:
+  capacity:
+    storage: 40Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-storage
+  local:
+    path: /mnt/mongodb-storage/mongodb-data-2
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - YOUR-NODE-NAME-HERE  # 👈 CHANGE THIS! (run: kubectl get nodes)
+
+---
+# PRODUCTION SETUP CHECKLIST:
+#
+# 1. CREATE STORAGE DIRECTORIES ON EACH NODE:
+#    SSH to each node and run:
+#    sudo mkdir -p /mnt/mongodb-storage/mongodb-data-{0,1,2}
+#    sudo chmod 777 /mnt/mongodb-storage/mongodb-data-*
+#
+# 2. GET NODE NAMES:
+#    kubectl get nodes
+#    Copy the node names and replace 'YOUR-NODE-NAME-HERE' above
+#
+# 3. APPLY THIS FILE:
+#    kubectl apply -f mongodb-pv-prod.yaml
+#
+# 4. VERIFY PVS ARE AVAILABLE:
+#    kubectl get pv
+#    All should show: STATUS = Available
+#
+# 5. INSTALL MONGODB HA:
+#    helm install mongodb-prod . -f values-prod.yaml --namespace mongodb-ha --create-namespace
+#
+# MULTI-NODE BEST PRACTICE:
+# - Use different nodes for each PV (high availability)
+# - If you have 3 nodes: assign one PV per node
+# - Example:
+#   mongodb-pv-0 → k8s-worker-1
+#   mongodb-pv-1 → k8s-worker-2
+#   mongodb-pv-2 → k8s-worker-3
+#
+# SINGLE-NODE SETUP (Testing only):
+# - Use the same node name for all three PVs
+# - All three directories on same node

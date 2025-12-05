@@ -1,3 +1,4 @@
+{{- if .Values.mongodb.service.nodePort }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -14,3 +15,4 @@ spec:
       port: {{ .Values.mongodb.service.port }}
       targetPort: mongodb
       nodePort: {{ .Values.mongodb.service.nodePort }}
+{{- end }}

@@ -18,83 +18,94 @@ spec:
     spec:
       terminationGracePeriodSeconds: 30
       securityContext:
-        fsGroup: {{ .Values.securityContext.fsGroup }}
-        runAsUser: {{ .Values.securityContext.runAsUser }}
+        fsGroup: 999
+
       initContainers:
-        # Setup keyfile with correct permissions
         - name: setup-keyfile
           image: busybox:1.36
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
           command:
             - sh
             - -c
             - |
-              cp /tmp/keyfile/replica-set-key /data/keyfile/replica-set-key
-              chmod 400 /data/keyfile/replica-set-key
-              chown 999:999 /data/keyfile/replica-set-key
+              cp /secret/replica-set-key /keyfile/replica-set-key
+              chmod 400 /keyfile/replica-set-key
+              chown 999:999 /keyfile/replica-set-key
           volumeMounts:
             - name: keyfile-secret
-              mountPath: /tmp/keyfile
+              mountPath: /secret
             - name: keyfile
-              mountPath: /data/keyfile
-          securityContext:
-            runAsUser: 0
-        
-        # Initialize data directory
+              mountPath: /keyfile
+
         - name: init-data-dir
           image: busybox:1.36
+          securityContext:
+            runAsUser: 0
+            runAsNonRoot: false
           command:
             - sh
             - -c
             - |
               chown -R 999:999 /data/db
               chmod -R 755 /data/db
-              mkdir -p /var/log/mongodb
-              chown -R 999:999 /var/log/mongodb
-              chmod -R 755 /var/log/mongodb
           volumeMounts:
             - name: mongodb-data
               mountPath: /data/db
-            - name: mongodb-logs
-              mountPath: /var/log/mongodb
-          securityContext:
-            runAsUser: 0
-      
+
       containers:
         - name: mongodb
           image: "{{ .Values.mongodb.image.repository }}:{{ .Values.mongodb.image.tag }}"
           imagePullPolicy: {{ .Values.mongodb.image.pullPolicy }}
-          command:
-            - mongod
-            - --config
-            - /etc/mongod.conf
+          securityContext:
+            runAsUser: 999
+            runAsNonRoot: true
           ports:
-            - containerPort: {{ .Values.mongodb.service.port }}
-              name: mongodb
-          volumeMounts:
-            - name: mongodb-data
-              mountPath: {{ .Values.mongodb.storage.dbPath }}
-            - name: mongodb-config-volume
-              mountPath: /etc/mongod.conf
-              subPath: mongod.conf
-            - name: keyfile
-              mountPath: /etc/mongodb-keyfile
-            - name: mongodb-logs
-              mountPath: /var/log/mongodb
+            - name: mongodb
+              containerPort: {{ .Values.mongodb.service.port }}
+          command:
+            - bash
+            - -c
+            - |
+              # Check if initialization is complete
+              if [ -f /data/db/.mongodb_initialized ]; then
+                echo "Starting MongoDB with authentication enabled..."
+                exec mongod \
+                  --replSet={{ .Values.mongodb.replicaSet.name }} \
+                  --bind_ip_all \
+                  --keyFile=/etc/mongodb-keyfile/replica-set-key \
+                  --dbpath=/data/db \
+                  --logpath=/var/log/mongodb/mongod.log
+              else
+                echo "First startup - authentication disabled for initialization..."
+                exec mongod \
+                  --replSet={{ .Values.mongodb.replicaSet.name }} \
+                  --bind_ip_all \
+                  --dbpath=/data/db \
+                  --logpath=/var/log/mongodb/mongod.log
+              fi
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mongodb-ha.fullname" . }}-secret
+                  key: rootUsername
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mongodb-ha.fullname" . }}-secret
+                  key: rootPassword
           resources:
             {{- toYaml .Values.mongodb.resources | nindent 12 }}
           livenessProbe:
             exec:
               command:
-                - mongosh
-                - --quiet
-                - -u
-                - {{ .Values.mongodb.auth.rootUsername }}
-                - -p
-                - {{ .Values.mongodb.auth.rootPassword }}
-                - --authenticationDatabase
-                - admin
-                - --eval
-                - "db.adminCommand('ping')"
+                - bash
+                - -c
+                - |
+                  mongosh --quiet --eval "db.adminCommand('ping')" >/dev/null 2>&1 || \
+                  mongosh -u $MONGO_INITDB_ROOT_USERNAME -p $MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --quiet --eval "db.adminCommand('ping')" >/dev/null 2>&1
             initialDelaySeconds: 60
             periodSeconds: 20
             timeoutSeconds: 10
@@ -102,42 +113,42 @@ spec:
           readinessProbe:
             exec:
               command:
-                - mongosh
-                - --quiet
-                - -u
-                - {{ .Values.mongodb.auth.rootUsername }}
-                - -p
-                - {{ .Values.mongodb.auth.rootPassword }}
-                - --authenticationDatabase
-                - admin
-                - --eval
-                - "db.adminCommand('ping')"
+                - bash
+                - -c
+                - |
+                  mongosh --quiet --eval "db.adminCommand('ping')" >/dev/null 2>&1 || \
+                  mongosh -u $MONGO_INITDB_ROOT_USERNAME -p $MONGO_INITDB_ROOT_PASSWORD --authenticationDatabase admin --quiet --eval "db.adminCommand('ping')" >/dev/null 2>&1
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
-      
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+            - name: keyfile
+              mountPath: /etc/mongodb-keyfile
+              readOnly: true
+            - name: mongodb-logs
+              mountPath: /var/log/mongodb
+
       volumes:
-        - name: mongodb-config-volume
-          configMap:
-            name: {{ include "mongodb-ha.fullname" . }}-config
         - name: keyfile-secret
           secret:
             secretName: {{ include "mongodb-ha.fullname" . }}-secret
+            defaultMode: 0400
             items:
-              - key: REPLICA_SET_KEY
+              - key: replica-set-key
                 path: replica-set-key
         - name: keyfile
           emptyDir: {}
         - name: mongodb-logs
           emptyDir: {}
-  
+
   volumeClaimTemplates:
     - metadata:
         name: mongodb-data
       spec:
-        accessModes:
-          - ReadWriteOnce
+        accessModes: [ "ReadWriteOnce" ]
         storageClassName: {{ .Values.mongodb.storage.storageClassName }}
         resources:
           requests:

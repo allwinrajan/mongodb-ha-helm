@@ -42,10 +42,31 @@ If you see errors, fix them before continuing.
 # Test if chart renders correctly
 helm install test-mongodb . --dry-run --debug --namespace mongodb-ha
 
+
+
 # This will show all YAML that would be created
 # Scroll through and check for errors
 # Press Ctrl+C when done reviewing
 ```
+
+### How to Install Each Environment
+```
+Production
+
+helm install mongodb-prod . -f values-prod.yaml --namespace mongodb-ha --create-namespace
+
+
+Test
+
+helm install mongodb-test . -f values-test.yaml --namespace mongodb-test --create-namespace --timeout 20m
+
+
+Dev
+
+helm install mongodb-dev . -f values-dev.yaml --namespace mongodb-dev --create-namespace
+
+```
+
 
 ### Step 4: Package the Chart
 

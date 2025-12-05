@@ -1,0 +1,47 @@
+# Production Environment Configuration
+namespace:
+  name: mongodb-ha
+  create: false
+
+mongodb:
+  image:
+    repository: mongo
+    tag: "7.0"
+    pullPolicy: IfNotPresent
+
+  replicaSet:
+    name: rs0
+    replicas: 3
+
+  auth:
+    rootUsername: admin
+    rootPassword: "Pr0d@MongoDB!Secure2024"  # CHANGE THIS!
+    # Production keyfile - Generate with: openssl rand -base64 756
+    replicaSetKey: |
+      TGhzIGlzIGEgdmVyeSBzZWN1cmUga2V5IGZvciBNb25nb0RCIHJlcGxpY2Egc2V0IGF1dGhlbnRp
+      Y2F0aW9uLiBQbGVhc2UgY2hhbmdlIHRoaXMgdG8gYSByYW5kb20gYmFzZTY0IGVuY29kZWQgc3Ry
+      aW5nIGZvciBwcm9kdWN0aW9uIHVzZS4gVGhpcyBrZXkgbXVzdCBiZSBiZXR3ZWVuIDYgYW5kIDEw
+      MjQgY2hhcmFjdGVycyBsb25nLg==
+
+  storage:
+    dbPath: /data/db
+    size: 40Gi
+    storageClassName: local-storage  # Uses local-storage for production
+    cacheSizeGB: 3
+    oplogSizeMB: 8192
+
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "500m"
+    limits:
+      memory: "4Gi"
+      cpu: "1000m"
+
+  service:
+    port: 27017
+    nodePort: 30017  # External access for production
+
+securityContext:
+  fsGroup: 999
+  runAsUser: 999

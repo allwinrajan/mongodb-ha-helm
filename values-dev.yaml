@@ -1,0 +1,43 @@
+# Development Values
+mongodb:
+  image:
+    repository: mongo
+    tag: "7.0"
+    pullPolicy: IfNotPresent
+
+  replicaSet:
+    name: rs-dev
+    replicas: 1   # Single replica for developers
+
+  auth:
+    rootUsername: dev
+    rootPassword: "Dev12345"
+    replicaSetKey: |
+      RGV2IG1vZGUgcmVwbGljYSBzZXQga2V5Lg==
+
+  storage:
+    dbPath: /data/db
+    size: 5Gi
+    storageClassName: local-storage
+    cacheSizeGB: 0.5
+    oplogSizeMB: 512
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "300m"
+
+  service:
+    port: 27017
+    nodePort: null
+
+namespace:
+  name: mongodb-dev
+  create: true
+
+securityContext:
+  fsGroup: 999
+  runAsUser: 999

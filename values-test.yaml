@@ -1,12 +1,7 @@
-# Default values for mongodb-ha
-# This is a base configuration - use values-test.yaml or values-prod.yaml for deployments
-
-nameOverride: ""
-fullnameOverride: ""
-
+# Test Environment Configuration
 namespace:
-  name: mongodb-ha
-  create: true
+  name: mongodb-test
+  create: false
 
 mongodb:
   image:
@@ -15,19 +10,19 @@ mongodb:
     pullPolicy: IfNotPresent
 
   replicaSet:
-    name: rs0
+    name: rs-test
     replicas: 3
 
   auth:
     rootUsername: admin
-    rootPassword: "changeme"
-    # Generate with: openssl rand -base64 756
-    replicaSetKey: "VGhpcyBpcyBhIGRlZmF1bHQga2V5LiBQbGVhc2UgY2hhbmdlIGluIHByb2R1Y3Rpb24h"
+    rootPassword: "Test@MongoDB123"
+    # Test keyfile - DO NOT USE IN PRODUCTION
+    replicaSetKey: "VGVzdEtleUZvck1vbmdvREJSZXBsaWNhU2V0SW5UZXN0RW52aXJvbm1lbnRPbmx5IQ=="
 
   storage:
     dbPath: /data/db
     size: 10Gi
-    storageClassName: local-path
+    storageClassName: local-path  # Uses local-path for testing
     cacheSizeGB: 1
     oplogSizeMB: 1024
 
@@ -41,7 +36,7 @@ mongodb:
 
   service:
     port: 27017
-    nodePort: null
+    nodePort: null  # No NodePort in test to avoid conflicts
 
 securityContext:
   fsGroup: 999

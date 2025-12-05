@@ -12,21 +12,12 @@ data:
       wiredTiger:
         engineConfig:
           cacheSizeGB: {{ .Values.mongodb.storage.cacheSizeGB }}
-          journalCompressor: snappy
-        collectionConfig:
-          blockCompressor: snappy
     systemLog:
       destination: file
       path: /var/log/mongodb/mongod.log
       logAppend: true
-      verbosity: 0
     net:
       port: {{ .Values.mongodb.service.port }}
       bindIp: 0.0.0.0
-      maxIncomingConnections: 5000
     replication:
-      replSetName: {{ .Values.mongodb.replicaSet.name | quote }}
-      oplogSizeMB: {{ .Values.mongodb.storage.oplogSizeMB }}
-    security:
-      authorization: enabled
-      keyFile: /etc/mongodb-keyfile/replica-set-key
+      replSetName: {{ .Values.mongodb.replicaSet.name }}
