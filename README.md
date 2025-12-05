@@ -2,6 +2,35 @@
 
 Production-ready MongoDB High Availability Replica Set for Kubernetes.
 
+.
+├── Chart.yaml
+├── index.yaml
+├── Linting
+├── mongodb-ha-1.0.0.tgz
+├── pre-configuration
+│   ├── mongodb-pv-prod.yaml
+│   ├── PACKAGING-GUIDE.md
+│   ├── PRODUCTION-DEPLOYMENT-GUIDE.md
+│   └── QUICK-START-PRODUCTION.md
+├── Publish.md
+├── README.md
+├── templates
+│   ├── configmap.yaml
+│   ├── _helpers.tpl
+│   ├── init-job.yaml
+│   ├── namespace.yaml
+│   ├── rbac.yaml
+│   ├── secret.yaml
+│   ├── service-nodeport.yaml
+│   ├── service.yaml
+│   └── statefulset.yaml
+├── values-dev.yaml
+├── values-prod.yaml
+├── values-test.yaml
+└── values.yaml
+
+2 directories, 23 files
+
 ## Prerequisites
 
 - Kubernetes 1.19+
