@@ -3,20 +3,20 @@ entries:
   mongodb-ha:
   - apiVersion: v2
     appVersion: "7.0"
-    created: "2025-12-05T11:18:44.626738681+05:30"
+    created: "2025-12-05T11:26:18.379549387+05:30"
     description: MongoDB High Availability Replica Set for Kubernetes
-    digest: 9ca815393a441fa3e0a3966cd895f970341921a2d8496e63ce4a4f5d8233778d
+    digest: 4919fe2977c804f9018338b342d3c2223ca05e4bf5398e86c859050b71310f6b
     keywords:
     - mongodb
     - database
     - replicaset
     - high-availability
     maintainers:
-    - email: your.email@example.com
-      name: Your Name
+    - email: alwinrajan06@gmail.com
+      name: allwinrajan
     name: mongodb-ha
     type: application
     urls:
     - https://allwinrajan.github.io/mongodb-ha-helm/mongodb-ha-1.0.0.tgz
     version: 1.0.0
-generated: "2025-12-05T11:18:44.615598155+05:30"
+generated: "2025-12-05T11:26:18.378425349+05:30"
