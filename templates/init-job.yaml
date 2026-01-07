@@ -57,13 +57,41 @@ spec:
 
               echo "[init-job] ✓ MongoDB pod-0 is reachable"
 
-              # Check if replica set is already initialized
+              # Check if replica set is already initialized AND working correctly
               echo "[init-job] Checking replica set status..."
-              RS_STATUS=$(mongosh --host "${POD0_FQDN}" --quiet --eval 'try { JSON.stringify(rs.status()) } catch(e) { "NOT_INITIALIZED" }' 2>/dev/null || echo "NOT_INITIALIZED")
+              RS_STATUS=$(mongosh --host "${POD0_FQDN}" --quiet --eval 'try { rs.status(); print("RS_OK") } catch(e) { print("RS_ERROR: " + e.message) }' 2>&1)
 
-              if echo "${RS_STATUS}" | grep -q '"ok".*1'; then
-                echo "[init-job] ✓ Replica set already initialized"
+              if echo "${RS_STATUS}" | grep -q "RS_OK"; then
+                echo "[init-job] ✓ Replica set already initialized and working correctly"
+                RS_INITIALIZED=true
+              elif echo "${RS_STATUS}" | grep -q "no replset config has been received"; then
+                echo "[init-job] Replica set not initialized yet"
+                RS_INITIALIZED=false
+              elif echo "${RS_STATUS}" | grep -qi "already initialized\|invalid.*config\|not a member"; then
+                echo "[init-job] ⚠️  Replica set config is corrupted - forcing reinitialization"
+                echo "[init-job] Attempting to reset local replica set config..."
+                
+                # Try to reconfigure with force
+                mongosh --host "${POD0_FQDN}" --quiet --eval "
+                  try {
+                    var conf = rs.conf();
+                    conf.members = [
+                      { _id: 0, host: '${RELEASE_FULLNAME}-0.${RELEASE_FULLNAME}-service.${NAMESPACE}.svc.cluster.local:${MONGO_PORT}', priority: 2 }
+                    ];
+                    rs.reconfig(conf, {force: true});
+                    print('RECONFIG_SUCCESS');
+                  } catch(e) {
+                    print('RECONFIG_FAILED: ' + e.message);
+                  }
+                " 2>&1
+                
+                RS_INITIALIZED=false
               else
+                echo "[init-job] Unknown replica set state, will attempt initialization"
+                RS_INITIALIZED=false
+              fi
+
+              if [ "${RS_INITIALIZED}" = "false" ]; then
                 echo "[init-job] Initializing replica set ${RS_NAME}..."
                 
                 MEMBERS=""
@@ -81,7 +109,26 @@ spec:
                   MEMBERS="${MEMBERS}{ _id:${i}, host:'${RELEASE_FULLNAME}-${i}.${RELEASE_FULLNAME}-service.${NAMESPACE}.svc.cluster.local:${MONGO_PORT}', priority:${PRIORITY} }"
                 done
 
-                mongosh --host "${POD0_FQDN}" --eval "rs.initiate({_id: '${RS_NAME}', members:[${MEMBERS}]})"
+                # Try initiate, ignore "already initialized" errors
+                INIT_RESULT=$(mongosh --host "${POD0_FQDN}" --quiet --eval "
+                  try {
+                    rs.initiate({_id: '${RS_NAME}', members:[${MEMBERS}]});
+                    print('INIT_SUCCESS');
+                  } catch(e) {
+                    if (e.message.includes('already initialized')) {
+                      print('ALREADY_INIT');
+                    } else {
+                      print('INIT_ERROR: ' + e.message);
+                    }
+                  }
+                " 2>&1)
+                
+                if echo "${INIT_RESULT}" | grep -q "INIT_SUCCESS\|ALREADY_INIT"; then
+                  echo "[init-job] ✓ Replica set initialized"
+                else
+                  echo "[init-job] ERROR: Failed to initialize: ${INIT_RESULT}"
+                  exit 1
+                fi
                 
                 echo "[init-job] Waiting 30s for replica set to stabilize..."
                 sleep 30
@@ -91,7 +138,7 @@ spec:
               echo "[init-job] Waiting for PRIMARY to be elected..."
               ATTEMPT=0
               MAX_ATTEMPTS=30
-              until mongosh --host "${POD0_FQDN}" --quiet --eval 'rs.status().members.find(m => m.stateStr === "PRIMARY")' | grep -q "PRIMARY" || [ $ATTEMPT -ge $MAX_ATTEMPTS ]; do
+              until mongosh --host "${POD0_FQDN}" --quiet --eval 'rs.status().members.find(m => m.stateStr === "PRIMARY")' 2>/dev/null | grep -q "PRIMARY" || [ $ATTEMPT -ge $MAX_ATTEMPTS ]; do
                 ATTEMPT=$((ATTEMPT+1))
                 echo "[init-job] Waiting for PRIMARY... (${ATTEMPT}/${MAX_ATTEMPTS})"
                 sleep 2
@@ -105,9 +152,9 @@ spec:
 
               # Create admin user
               echo "[init-job] Checking for admin user..."
-              USER_CHECK=$(mongosh --host "${POD0_FQDN}" --quiet --eval "try { db.getSiblingDB('admin').getUser('${ROOT_USER}') } catch(e) { null }" 2>/dev/null || echo "null")
+              USER_CHECK=$(mongosh --host "${POD0_FQDN}" --quiet --eval "try { db.getSiblingDB('admin').getUser('${ROOT_USER}'); print('USER_EXISTS'); } catch(e) { print('USER_NOT_FOUND'); }" 2>&1)
 
-              if echo "${USER_CHECK}" | grep -q "null"; then
+              if echo "${USER_CHECK}" | grep -q "USER_NOT_FOUND"; then
                 echo "[init-job] Creating admin user '${ROOT_USER}'..."
                 mongosh --host "${POD0_FQDN}" --eval "
                   admin = db.getSiblingDB('admin');

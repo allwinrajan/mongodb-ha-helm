@@ -36,11 +36,11 @@ mongodb:
 
   resources:
     requests:
-      memory: "1Gi"
+      memory: "512Mi"
       cpu: "200m"
     limits:
-      memory: "2Gi"
-      cpu: "500m"
+      memory: "500m"
+      cpu: "512Mi"
 
   service:
     type: ClusterIP
